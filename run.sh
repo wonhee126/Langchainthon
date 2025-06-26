@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 한밤의 꿈해몽 상담가 - 실행 스크립트
+# 한밤의 꿈해몽 상담가 - 실행 스크립트 (OpenAI API 버전)
 
 echo "🌙 한밤의 꿈해몽 상담가를 시작합니다..."
 
@@ -12,9 +12,21 @@ else
     exit 1
 fi
 
-# 환경 변수 설정 (M2 Mac 최적화)
-export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.7
-export MLX_MEMORY_LIMIT_GB=6
+# .streamlit/secrets.toml 파일 확인
+if [ ! -f ".streamlit/secrets.toml" ]; then
+    echo "❌ .streamlit/secrets.toml 파일을 찾을 수 없습니다."
+    echo "다음 내용으로 .streamlit/secrets.toml 파일을 생성하세요:"
+    echo 'OPENAI_API_KEY = "your_openai_api_key_here"'
+    exit 1
+fi
+
+# OpenAI API 키 확인
+if ! grep -q "OPENAI_API_KEY" .streamlit/secrets.toml; then
+    echo "❌ secrets.toml 파일에 OPENAI_API_KEY가 설정되지 않았습니다."
+    exit 1
+fi
+
+echo "✅ OpenAI API 키 설정 확인됨"
 
 # 메모리 상태 확인
 echo "💻 현재 메모리 상태:"

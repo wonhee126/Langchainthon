@@ -1,6 +1,6 @@
 """
 한밤의 꿈해몽 상담가 - RAG 챗봇
-M2 MacBook Air 8GB RAM 최적화 버전
+OpenAI API 사용 버전 (Streamlit Cloud 배포용)
 """
 
 import os
@@ -16,9 +16,7 @@ import numpy as np
 import psutil
 import streamlit as st
 from sentence_transformers import SentenceTransformer
-from mlx_lm import load, generate
-import mlx.core as mx
-
+from openai import OpenAI
 
 class DreamRAGBot:
     """꿈 해석 RAG 챗봇 클래스"""
@@ -56,22 +54,24 @@ class DreamRAGBot:
     def _load_embedder(self):
         """임베딩 모델 로드"""
         with st.spinner("🧠 임베딩 모델 로딩..."):
-            self.embedder = SentenceTransformer(self.config['embedding_model'])
+            self.embedder = SentenceTransformer(
+                self.config['embedding_model'], device="cpu"
+            )
             self.embedder.max_seq_length = 512
     
     def _load_llm(self):
-        """MLX 기반 Qwen 모델 로드"""
-        with st.spinner("🤖 Qwen 모델 로딩 (최초 실행 시 다운로드)..."):
-            # Qwen 2.5-7B Int4 모델 (메모리 효율적)
-            model_name = "mlx-community/Qwen2.5-7B-Instruct-4bit"
-            
+        """OpenAI API 클라이언트 설정"""
+        with st.spinner("🤖 OpenAI API 클라이언트 설정..."):
+            # Streamlit secrets에서 API 키 가져오기
             try:
-                self.model, self.tokenizer = load(model_name)
-                st.success("✅ LLM 모델 로드 완료")
-            except Exception as e:
-                st.error(f"❌ 모델 로드 실패: {e}")
-                st.info("모델을 다운로드하려면: `mlx-lm download mlx-community/Qwen2.5-7B-Instruct-4bit`")
-                raise
+                api_key = st.secrets["OPENAI_API_KEY"]
+            except Exception:
+                st.error("❌ OpenAI API 키가 설정되지 않았습니다.")
+                st.info("Streamlit Cloud의 Secrets에 OPENAI_API_KEY를 추가해주세요.")
+                raise ValueError("OpenAI API 키가 필요합니다.")
+            
+            self.client = OpenAI(api_key=api_key)
+            st.success("✅ OpenAI API 클라이언트 설정 완료")
     
     def search_similar_chunks(self, query: str, k: int = 5) -> List[Dict]:
         """
@@ -109,7 +109,7 @@ class DreamRAGBot:
     
     def generate_response(self, query: str, context_chunks: List[Dict]) -> str:
         """
-        LLM을 사용해 응답 생성
+        OpenAI API를 사용해 응답 생성
         
         Args:
             query: 사용자 질문
@@ -149,32 +149,24 @@ WHO 수면 자료:
 
 위 자료를 참고하여 3단계 형식으로 답변해주세요."""
         
-        # 토큰 제한 (M2 8GB 최적화)
-        max_tokens = 300
-        
-        # 생성
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ]
-        
-        prompt = self.tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True
-        )
-        
-        # MLX 생성
-        response = generate(
-            self.model,
-            self.tokenizer,
-            prompt=prompt,
-            max_tokens=max_tokens,
-            temperature=0.7,  # 창의성과 일관성의 균형
-            top_p=0.9,
-        )
-        
-        return response
+        # OpenAI API 호출 (o3 모델 고정)
+        try:
+            response = self.client.chat.completions.create(
+                model="o3-mini",  # o3 모델 고정
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                max_tokens=600,
+                temperature=0.7,
+                top_p=0.9,
+            )
+            
+            return response.choices[0].message.content
+            
+        except Exception as e:
+            st.error(f"❌ OpenAI API 호출 실패: {e}")
+            return "죄송합니다. 현재 꿈 해석 서비스에 문제가 발생했습니다. 잠시 후 다시 시도해주세요."
 
 
 def init_session_state():
@@ -185,7 +177,11 @@ def init_session_state():
     if 'rag_bot' not in st.session_state:
         index_dir = Path("index")
         if index_dir.exists():
-            st.session_state.rag_bot = DreamRAGBot(index_dir)
+            try:
+                st.session_state.rag_bot = DreamRAGBot(index_dir)
+            except ValueError as e:
+                st.error(f"❌ 초기화 실패: {e}")
+                st.stop()
         else:
             st.error("❌ 인덱스를 찾을 수 없습니다. 먼저 `python scripts/build_index.py`를 실행하세요.")
             st.stop()
@@ -208,11 +204,14 @@ def main():
         st.markdown("### 💡 사용법")
         st.markdown("""
         1. 꿈의 내용을 자세히 입력하세요
-        2. 3초 이내에 세 가지 관점의 해석을 받아보세요
+        2. OpenAI o3로 세 가지 관점의 해석을 받아보세요
         3. 더 나은 수면을 위한 조언도 함께!
         """)
         
         st.markdown("---")
+        
+        # 모델 정보 표시
+        st.info("🤖 사용 모델: OpenAI o3-mini")
         
         # 메모리 모니터링
         memory = psutil.virtual_memory()

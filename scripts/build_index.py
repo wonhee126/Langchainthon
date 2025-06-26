@@ -30,7 +30,8 @@ class PDFIndexBuilder:
             embedding_model_name: 임베딩 모델 이름 (e5-base는 한국어 지원)
         """
         print(f"🚀 임베딩 모델 로딩: {embedding_model_name}")
-        self.embedder = SentenceTransformer(embedding_model_name)
+        # MPS 환경에서 메모리 부족을 방지하기 위해 CPU 사용
+        self.embedder = SentenceTransformer(embedding_model_name, device="cpu")
         
         # M2 Mac 최적화: 배치 크기 축소
         self.embedder.max_seq_length = 512  # 메모리 절약
