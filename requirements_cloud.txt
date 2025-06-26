@@ -1,0 +1,19 @@
+# Streamlit Community Cloud 배포용 의존성
+# MLX 제외, OpenAI API 사용
+
+# Core
+streamlit==1.35.0
+langchain==0.2.11
+langchain-community==0.2.10
+
+# 벡터 DB & 임베딩
+faiss-cpu==1.8.0
+sentence-transformers==3.0.1
+numpy<2.0
+
+# OpenAI
+openai==1.35.0
+
+# 유틸리티
+python-dotenv==1.0.1
+tiktoken==0.7.0 

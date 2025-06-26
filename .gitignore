@@ -1,0 +1,30 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# 환경 변수
+.env
+.env.local
+
+# MLX 모델 (크기가 큼)
+models/
+
+# 개발 파일
+.DS_Store
+*.log
+*.swp
+
+# IDE
+.vscode/
+.idea/
+
+# 임시 파일
+*.tmp
+*.bak
+
+# Streamlit
+.streamlit/secrets.toml 
