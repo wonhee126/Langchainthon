@@ -17,7 +17,7 @@ RAG(Retrieval-Augmented Generation) 시스템으로 원문을 참조하여 정�
 - **🎭 프로이트의 추론적 해석**: 개인적 통찰과 철학적 사색 제공
 - **🔍 고품질 RAG 시스템**: FAISS 벡터 검색으로 관련 원문 자동 검색
 - **📊 출처 투명성**: 실제 참고한 문헌 구절을 사용자에게 공개
-- **⚡ 빠른 응답**: OpenAI GPT-4o로 고품질 응답 생성
+- **⚡ 빠른 응답**: OpenAI GPT-4.1로 고품질 응답 생성
 
 ## 🛠 기술 스택
 
@@ -35,7 +35,7 @@ RAG(Retrieval-Augmented Generation) 시스템으로 원문을 참조하여 정�
 
 ```bash
 # 저장소 클론
-git clone <your-repo-url>
+git clone https://github.com/chi2hoon/dream_bot.git
 cd dream_bot
 
 # 가상환경 생성 (권장)
@@ -201,7 +201,7 @@ filtered_results = [r for r in final_results if r['score'] > 0.5]  # 임계값 �
 | 인덱싱 시간 | ~5분 (첫 실행 시) |
 | 임베딩 모델 로딩 | ~10초 (첫 실행 시) |
 | RAG 검색 | ~1-2초 (다중 쿼리) |
-| 응답 생성 | ~3-8초 (GPT-4o API) |
+| 응답 생성 | ~3-8초 (GPT-4.1 API) |
 | 메모리 사용 | ~1-2GB (로컬 LLM 불필요) |
 
 ## 🐛 문제 해결
@@ -279,12 +279,11 @@ git push origin main
 
 ## 📜 라이선스 및 저작권
 
-- **코드**: MIT License
+- **코드**: 개인 프로젝트 (특정 라이선스 미지정)
 - **데이터**:
-  - Freud's "The Interpretation of Dreams": Public Domain
-  - WHO Sleep Guidelines: CC BY-NC-SA 3.0 IGO
+  - Freud's "The Interpretation of Dreams": Public Domain (저작권 만료)
 - **AI 모델**: 
-  - OpenAI GPT-4o: OpenAI API 이용약관
+  - OpenAI GPT-4.1: OpenAI API 이용약관
   - intfloat/multilingual-e5-base: MIT License
 
 ## 🤝 기여 방법
