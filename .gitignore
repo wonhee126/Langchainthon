@@ -58,8 +58,12 @@ ENV/
 ehthumbs.db
 Thumbs.db
 
-# Streamlit secrets (로컬 개발용)
+# API 키 및 민감한 정보 (절대 업로드 금지!)
 .streamlit/secrets.toml
+.streamlit/secrets.toml.example
+*.key
+*.pem
+*.p12
 
 # Environment variables
 .env
@@ -82,25 +86,9 @@ models/
 *.log
 logs/
 
-# 환경 변수
-.env
-.env.local
-
-# MLX 모델 (크기가 큼)
+# 모델 캐시 (크기가 큼)
 models/
 
-# 개발 파일
-.DS_Store
-*.log
-*.swp
-
-# 임시 파일
+# 개발 및 임시 파일
 *.tmp
-*.bak
-
-# 임시 파일
-*.tmp
-*.bak
-
-# Streamlit
-.streamlit/secrets.toml 
+*.bak 
