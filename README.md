@@ -132,8 +132,6 @@ dream_bot/
 │   └── build_index.py      # 🏗️ PDF 인덱싱 스크립트
 ├── .streamlit/
 │   └── secrets.toml        # 🔐 API 키 설정
-├── deploy/
-│   └── DEPLOYMENT_GUIDE.md # 📖 배포 가이드
 └── requirements.txt        # 📦 의존성 목록
 ```
 
