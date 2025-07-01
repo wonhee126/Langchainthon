@@ -1,3 +1,6 @@
+# ========================
+# Python 기본
+# ========================
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -37,58 +40,195 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
-# Virtual environments
+# ========================
+# 가상환경 (Virtual environments)
+# ========================
 venv/
 env/
 ENV/
+.venv/
+.env/
+reddit_bot/
 
-# IDE
+# Conda
+conda-meta/
+conda-bld/
+
+# ========================
+# IDE 설정 파일들
+# ========================
+# Cursor IDE
+.cursor/
+*.cursor-*
+
+# VSCode
 .vscode/
+
+# PyCharm
 .idea/
+*.iml
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
 *.swp
 *.swo
 *~
 
-# OS generated files
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+
+# ========================
+# OS 생성 파일들
+# ========================
+# macOS
 .DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
+.fseventsd
+.VolumeIcon.icns
+
+# Windows
 ehthumbs.db
 Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
 
-# API 키 및 민감한 정보 (절대 업로드 금지!)
+# Linux
+.directory
+.Trash-*
+
+# ========================
+# 보안 & 민감한 정보 (절대 업로드 금지!)
+# ========================
 .streamlit/secrets.toml
 .streamlit/secrets.toml.example
 *.key
 *.pem
 *.p12
+config.ini
+.env
+.env.*
+!.env.example
 
-# Environment variables
+# API 키 파일들
+openai_api_key.txt
+api_keys.json
+credentials.json
+
+# ========================
+# 환경 변수 & 설정
+# ========================
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 
-# Model cache
+# ========================
+# 모델 & 캐시
+# ========================
+# Sentence Transformers 모델 캐시
 models/
 .cache/
+sentence_transformers/
 
+# Hugging Face 캐시
+.huggingface/
+transformers/
+
+# PyTorch 모델
+*.pth
+*.pt
+
+# ========================
+# 개발 환경
+# ========================
 # Jupyter Notebook
 .ipynb_checkpoints
+*.ipynb
 
 # pyenv
 .python-version
 
-# Logs
+# pipenv
+Pipfile.lock
+
+# Poetry
+poetry.lock
+
+# ========================
+# 로그 & 임시 파일
+# ========================
 *.log
 logs/
-
-# 모델 캐시 (크기가 큼)
-models/
-
-# 개발 및 임시 파일
 *.tmp
-*.bak 
+*.bak
+*.swp
+*.swo
+
+# ========================
+# 프로젝트 특화 파일들
+# ========================
+# 대용량 데이터 파일들 (GitHub에 업로드 불가)
+data/*.json        # TIFU, AITA JSON 파일들 (수백MB~GB)
+data/*.sqlite      # SQLite 데이터베이스 파일들
+data/*.csv         # CSV 데이터 파일들
+data/*.parquet     # Parquet 파일들
+data/*.jsonl       # JSONL 파일들
+
+# 생성된 인덱스 파일들 (빌드 결과물)
+index/
+*.faiss
+*.pkl
+*.npy
+
+# 모델 출력물
+outputs/
+results/
+checkpoints/
+
+# 임시 처리 파일들
+temp/
+tmp/
+processed_data/
+
+# ========================
+# 예외 (업로드 허용할 파일들)
+# ========================
+# 샘플 데이터는 허용 (작은 크기)
+!data/sample_*.json
+!data/example_*.json
+
+# 설정 템플릿은 허용
+!.env.example
+!.streamlit/config.toml.example
+
+# README와 문서화 파일들은 허용
+!README.md
+!docs/
+
+# ========================
+# 팀 협업 가이드
+# ========================
+# 대용량 파일 관리:
+# 1. Git LFS 사용하거나
+# 2. 클라우드 스토리지 공유
+# 3. 데이터 다운로드 스크립트 작성
+#
+# 민감한 정보:
+# .streamlit/secrets.toml 에 API 키 저장
+# 절대 GitHub에 업로드하지 말 것!
+#
+# 모델 캐시:
+# 팀원별로 로컬에서 각자 다운로드
+# 공통 캐시 디렉토리 설정 권장 

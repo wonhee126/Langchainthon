@@ -1,26 +1,59 @@
-# M2 MacBook Air 8GB RAM 최적화 의존성
-# Python 3.11+ 권장
+# Reddit 상담사 챗봇 의존성
+# 팀 협업용 - macOS 2명, Windows 2명 환경 지원
+# Python 3.11+ 권장 (3.9+ 호환)
 
-# Core
+# ========================
+# 필수 의존성 (Core)
+# ========================
 streamlit==1.35.0
 langchain==0.2.11
 langchain-community==0.2.10
 
-# PDF 처리
-pypdf==4.3.1
-pypdfium2==4.30.0  # 더 안정적인 PDF 추출
-
-# 벡터 DB & 임베딩
-faiss-cpu==1.8.0
-sentence-transformers==3.0.1
-numpy<2.0  # M1/M2 호환성
-
 # LLM (OpenAI API)
-openai>=1.0.0
+openai>=1.35.0
 
+# 데이터 처리 (기본 라이브러리)
+# json, sqlite3은 Python 기본 라이브러리로 별도 설치 불필요
+
+# ========================
+# 벡터 DB & 임베딩
+# ========================
+# FAISS는 OS별 설치 방법이 다르므로 아래 README.md 설치 가이드를 참고하세요.
+# conda를 사용한 설치를 강력히 권장합니다.
+sentence-transformers==3.0.1
+torch>=2.0.0
+numpy>=1.21.0,<2.0         # M1/M2 Mac 및 Windows 호환성
+
+# ========================
 # 유틸리티
-tiktoken==0.7.0  # 토큰 카운팅
-tqdm==4.66.4  # 진행률 표시
+# ========================
 
-# 메모리 최적화
-psutil==5.9.8  # 메모리 모니터링
+# ========================
+# 유틸리티
+# ========================
+tiktoken==0.7.0             # 토큰 카운팅
+tqdm==4.66.4                # 진행률 표시
+psutil==5.9.8               # 메모리 모니터링
+
+# ========================
+# 개발 환경 (선택사항)
+# ========================
+# jupyter>=1.0.0            # 노트북 개발용
+# ipykernel>=6.0.0          # Jupyter 커널
+
+# ========================
+# 설치 가이드
+# ========================
+# 1. 기본 설치:
+#    pip install -r requirements.txt
+#
+# 2. sentence-transformers 활성화 (완전한 RAG 기능):
+#    pip install sentence-transformers torch
+#
+# 3. 개발 환경:
+#    pip install jupyter ipykernel
+#
+# 4. 플랫폼별 주의사항:
+#    - Windows: Visual Studio Build Tools 필요 (C++ 컴파일러)
+#    - macOS M1/M2: Rosetta 없이도 동작하도록 설정됨
+#    - 메모리 부족 시: swap 메모리 늘리기 권장

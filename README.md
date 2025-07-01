@@ -1,301 +1,223 @@
-# 🎭 프로이트 박사의 꿈해몽 상담소
+# 🤗 Reddit 상담사 챗봇
 
-지그문트 프로이트의 『꿈의 해석』을 기반으로 한 AI 꿈해몽 상담 챗봇입니다.  
-RAG(Retrieval-Augmented Generation) 시스템으로 원문을 참조하여 정확한 정신분석학적 해석을 제공합니다.
+Reddit 커뮤니티의 TIFU(Today I F***ed Up) 데이터를 활용한 AI 상담사 챗봇입니다.
 
-> *"꿈은 무의식으로 가는 왕도이다"* - 지그문트 프로이트
+## 📖 프로젝트 소개
 
-## ⚠️ 이용 안내
+이 프로젝트는 Reddit의 실제 경험담을 학습하여, 사용자의 고민이나 문제 상황에 대해 공감적이고 실용적인 조언을 제공하는 RAG(Retrieval-Augmented Generation) 기반 챗봇입니다.
 
-**이 서비스는 오락 목적으로만 사용해주세요.**  
-프로이트의 꿈 해석 이론은 20세기 초 이론으로, 현대 과학에서는 검증되지 않은 부분이 많습니다.  
-실제 심리적 고민이 있으시면 전문 상담사와 상담하시기 바랍니다.
+### 주요 기능
+- 🔍 **유사 경험담 검색**: 사용자 상황과 비슷한 Reddit 포스트 검색
+- 💬 **공감적 상담**: 따뜻하고 이해심 많은 조언 제공
+- 📚 **경험 기반 조언**: 실제 사람들의 경험담을 바탕으로 한 현실적 조언
+- 🌟 **희망과 격려**: 문제 해결과 성장을 위한 긍정적 메시지
 
-## 🎯 주요 기능
+## 🛠️ 기술 스택
 
-- **📘 문헌 기반 분석**: 『꿈의 해석』 원문을 직접 인용하며 해석
-- **🎭 프로이트의 추론적 해석**: 개인적 통찰과 철학적 사색 제공
-- **🔍 고품질 RAG 시스템**: FAISS 벡터 검색으로 관련 원문 자동 검색
-- **📊 출처 투명성**: 실제 참고한 문헌 구절을 사용자에게 공개
-- **⚡ 빠른 응답**: OpenAI GPT-4.1로 고품질 응답 생성
+- **Frontend**: Streamlit
+- **LLM**: OpenAI GPT-4o-mini
+- **Vector DB**: FAISS
+- **Embedding**: multilingual-e5-base
+- **Data Processing**: JSON
+- **Language**: Python 3.11+
 
-## 🛠 기술 스택
+## 📂 프로젝트 구조
 
-| 구성 요소 | 기술 |
-|-----------|------|
-| LLM | OpenAI GPT-4.1 |
-| 임베딩 | intfloat/multilingual-e5-base |
-| 벡터 DB | FAISS (CPU) |
-| 프레임워크 | Streamlit + LangChain |
-| 런타임 | Python 3.11+ |
+```
+LangchainThon/
+├── app/
+│   └── app.py              # 메인 RAG 챗봇 앱
+├── data/
+│   └── tifu_all_tokenized_and_filtered.json  # TIFU 데이터
+├── index/
+│   ├── reddit_index.faiss  # FAISS 벡터 인덱스
+│   ├── chunks.pkl          # 문서 청크 데이터
+│   └── config.json         # 인덱스 설정
+├── scripts/
+│   └── build_index.py      # 인덱스 빌드 스크립트
+├── requirements.txt        # 의존성 파일
+└── README.md
+```
 
-## 📦 설치 방법
+## 🚀 설치 및 실행 (Windows & macOS 공통)
 
-### 1. 환경 설정
+이 프로젝트는 `conda`와 `environment.yml` 파일을 사용하여 개발 환경을 통일합니다. 아래 명령어를 실행하면 필요한 모든 라이브러리가 설치된 `reddit-rag` 가상환경이 자동으로 생성됩니다.
+
+### 1. 저장소 클론
 
 ```bash
 # 저장소 클론
-git clone https://github.com/chi2hoon/dream_bot.git
-cd dream_bot
-
-# 가상환경 생성 (권장)
-python -m venv venv
-source venv/bin/activate  # macOS/Linux
-# 또는 Windows: venv\Scripts\activate
-
-# 의존성 설치
-pip install -r requirements.txt
+git clone <repository-url>
+cd LangchainThon
 ```
 
-### 2. OpenAI API 키 설정
+### 2. Conda 환경 생성 및 의존성 설치
 
-⚠️ **보안 주의**: API 키는 절대 깃허브에 업로드하지 마세요!
+터미널에서 아래 명령어 단 하나만 실행하세요.
 
-**로컬 실행용:**
 ```bash
-# .streamlit/secrets.toml 파일에 API 키 설정
-mkdir -p .streamlit
-echo 'OPENAI_API_KEY = "your_openai_api_key_here"' > .streamlit/secrets.toml
-
-# .gitignore에 의해 자동으로 보호됨 (이미 설정됨)
+# environment.yml 파일을 사용하여 'reddit-rag' Conda 환경 생성
+conda env create -f environment.yml
 ```
 
-**Streamlit Cloud 배포용:**
-1. GitHub에 코드 푸시
-2. [Streamlit Cloud](https://share.streamlit.io)에 로그인
-3. 앱 생성 후 Settings → Secrets에서 다음 설정:
-   ```toml
-   OPENAI_API_KEY = "your_openai_api_key_here"
-   ```
-
-### 3. 인덱스 확인
-
-프로젝트에는 이미 프로이트의 『꿈의 해석』 인덱스가 포함되어 있습니다.  
-만약 인덱스를 재생성하려면:
+성공적으로 환경이 생성되었다면, 아래 명령어로 활성화합니다.
 
 ```bash
-# PDF 파일을 벡터 인덱스로 변환
+# 'reddit-rag' 환경 활성화
+conda activate reddit-rag
+```
+
+> **💡 `environment.yml`이란?**
+> 프로젝트에 필요한 Python 버전, Conda 패키지 (`faiss-cpu` 등), Pip 패키지를 모두 정의해놓은 명세서입니다. 이 파일 덕분에 팀원 모두가 OS에 상관없이 동일한 개발 환경을 명령어 하나로 구축할 수 있습니다.
+
+### 3. 데이터 준비
+
+`data` 폴더에 `tifu_all_tokenized_and_filtered.json` 파일이 있는지 확인해주세요.
+
+### 3. 인덱스 빌드
+
+```bash
+# 벡터 인덱스 생성 (최초 1회만 실행)
 python scripts/build_index.py
 ```
 
-## 🚀 실행 방법
+### 4. OpenAI API 키 설정
+
+Streamlit secrets 파일 생성:
+```bash
+mkdir .streamlit
+echo 'OPENAI_API_KEY = "your-api-key-here"' > .streamlit/secrets.toml
+```
+
+### 5. 앱 실행
 
 ```bash
-# Streamlit 앱 실행
+# Reddit 상담사 챗봇 실행
 streamlit run app/app.py
-
-# 또는 포트 지정
-streamlit run app/app.py --server.port 8080
 ```
 
-브라우저에서 `http://localhost:8501` 접속
+## 👥 팀 개발 가이드
 
-## 🌍 Streamlit Cloud 배포
+### 역할 분담
+- **데이터 처리**: JSON 데이터 전처리 및 정제
+- **벡터 검색**: FAISS 인덱스 최적화 및 검색 품질 개선
+- **프롬프트 엔지니어링**: 상담사 페르소나 및 응답 품질 개선
+- **UI/UX**: Streamlit 인터페이스 디자인 및 사용성 개선
 
-### 1. GitHub에 코드 업로드
+### 개발 워크플로우
+
+1. **브랜치 생성**: `feature/기능명` 형태로 브랜치 생성
+2. **개발**: 각자 담당 기능 개발
+3. **테스트**: 로컬에서 메인 앱 테스트
+4. **통합**: 기능 통합 및 테스트
+5. **배포**: Streamlit Cloud 배포
+
+### 개발 팁
+
+#### 빠른 테스트
 ```bash
-git add .
-git commit -m "Add Freud dream interpretation app"
-git push origin main
+# 로컬에서 앱 테스트
+streamlit run app/app.py
 ```
 
-### 2. Streamlit Cloud 배포
-1. [Streamlit Cloud](https://share.streamlit.io)에 GitHub 계정으로 로그인
-2. "New app" 클릭
-3. GitHub 저장소 선택
-4. Main file path: `app/app.py`
-5. "Deploy!" 클릭
-
-### 3. API 키 설정
-1. 배포된 앱의 "Settings" → "Secrets" 이동
-2. 다음 내용 입력:
-   ```toml
-   OPENAI_API_KEY = "your_openai_api_key_here"
-   ```
-3. "Save" 클릭
-
-이제 전 세계 어디서든 프로이트 박사의 꿈해몽 상담을 받을 수 있습니다! 🎭
-
-## 📁 프로젝트 구조
-
-```
-dream_bot/
-├── app/
-│   └── app.py              # 🎭 프로이트 박사 메인 앱
-├── data/
-│   └── freud_dreams.pdf    # 📚 프로이트 『꿈의 해석』 원문
-├── index/                  # 🔍 FAISS 벡터 인덱스 (자동 생성)
-│   ├── dream_index.faiss   # 벡터 인덱스
-│   ├── chunks.pkl          # 문서 청크 데이터
-│   └── config.json         # 인덱스 설정 정보
-├── scripts/
-│   └── build_index.py      # 🏗️ PDF 인덱싱 스크립트
-├── .streamlit/
-│   └── secrets.toml        # 🔐 API 키 설정
-└── requirements.txt        # 📦 의존성 목록
+#### 인덱스 재빌드
+```bash
+# 데이터 변경 시 인덱스 재생성
+python scripts/build_index.py
 ```
 
-## 💭 사용법
+#### 메모리 최적화
+- 배치 처리로 메모리 사용량 제어
+- 주기적인 `gc.collect()` 호출
+- 큰 파일은 스트리밍 방식으로 처리
 
-### 기본 상담 방법
-1. **꿈 입력**: 채팅창에 꿈의 내용을 자세히 기술
-2. **해석 확인**: 프로이트 박사의 2단계 해석 확인
-   - **📘 문헌 기반 분석**: 『꿈의 해석』 원문 인용
-   - **🎭 프로이트의 추론적 해석**: 개인적 통찰과 철학적 사색
-3. **원문 확인**: "검색된 『꿈의 해석』 원문" 섹션에서 실제 참고 문헌 확인
-4. **추가 상담**: 더 자세한 설명이나 다른 해석이 필요하면 대화 계속
+## 📊 데이터 형식
 
-### 검색 품질 확인
-- **관련도 점수**: 🟢높음(0.7+) / 🟡보통(0.5+) / 🔴낮음(0.5-)
-- **검색 품질 요약**: 평균 관련도와 고품질 구절 수 표시
-- **원문 미검색 시**: 자동으로 경고 메시지 표시
-
-## ⚡ 성능 및 특징
-
-### RAG 시스템 고도화
-- **다중 쿼리 검색**: 영어/한국어/정신분석 용어로 확장 검색
-- **품질 필터링**: 유사도 0.5 이하 결과 자동 제거
-- **중복 제거**: 동일 청크의 최고 점수만 유지
-- **출처 투명성**: 실제 활용된 원문 구절 완전 공개
-
-### 환각 방지 시스템
-- **우선순위 강조**: 문헌 내용 우선 활용 지시
-- **출처-추론 분리**: 원문 인용과 개인적 해석 명확히 구분
-- **검색 실패 대응**: 관련 문헌 부족 시 명시적 경고
-
-## 🔧 고급 설정
-
-### 청크 크기 조정
-
-`scripts/build_index.py`에서:
-
-```python
-self.text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=600,      # 크기 조정 (기본: 600)
-    chunk_overlap=100,   # 중복 조정 (기본: 100)
-)
+### TIFU JSON 형식
+```json
+{
+  "title": "게시물 제목",
+  "selftext_without_tldr": "본문 내용",
+  "tldr": "요약",
+  "score": 점수,
+  "num_comments": 댓글수,
+  "id": "포스트ID"
+}
 ```
 
-### 검색 결과 수 변경
+## 🔧 커스터마이징
 
-`app/app.py`에서:
+### 새로운 데이터 소스 추가
 
-```python
-relevant_chunks = st.session_state.rag_bot.search_similar_chunks(prompt, k=15)  # k값 조정
-```
+1. `scripts/build_index.py`에 로더 함수 추가
+2. 데이터 형식에 맞는 전처리 로직 구현
+3. 메타데이터 스키마 정의
 
-### 품질 임계값 조정
+### 상담사 페르소나 변경
 
-```python
-# 품질 필터링: 유사도가 너무 낮은 것 제거
-filtered_results = [r for r in final_results if r['score'] > 0.5]  # 임계값 조정
-```
+`app/app.py`의 `system_prompt` 수정:
+- 상담 스타일 조정
+- 응답 구조 변경
+- 주의사항 추가
 
-## 📊 성능 벤치마크
+### 검색 품질 개선
 
-| 지표 | 값 |
-|------|-----|
-| 문서 청크 수 | ~10,500개 (프로이트 원문) |
-| 인덱싱 시간 | ~5분 (첫 실행 시) |
-| 임베딩 모델 로딩 | ~10초 (첫 실행 시) |
-| RAG 검색 | ~1-2초 (다중 쿼리) |
-| 응답 생성 | ~3-8초 (GPT-4.1 API) |
-| 메모리 사용 | ~1-2GB (로컬 LLM 불필요) |
+- `search_similar_chunks()` 함수의 쿼리 확장 로직 수정
+- 유사도 임계값 조정
+- 검색 결과 후처리 로직 개선
+
+## 📈 성능 최적화
+
+### 인덱스 최적화
+- 청크 크기 조정 (현재: 800자)
+- 오버랩 비율 조정 (현재: 100자)
+- FAISS 인덱스 타입 변경 고려
+
+### 응답 속도 개선
+- 배치 임베딩 처리
+- 캐싱 전략 적용
+- 비동기 처리 도입
+
+## 🚨 주의사항
+
+- **API 사용량**: OpenAI API 사용량 모니터링 필요
+- **메모리 관리**: 대용량 데이터 처리 시 메모리 부족 주의
+- **데이터 보안**: 개인정보가 포함된 데이터 처리 시 주의
+- **상담 범위**: 전문적인 의료/법률 조언은 제공하지 않음
 
 ## 🐛 문제 해결
 
-### "OpenAI API 키 미설정" 오류
+### 자주 발생하는 문제
 
-**로컬 실행:**
-```bash
-# secrets.toml 파일 확인
-cat .streamlit/secrets.toml
+1. **ImportError: sentence-transformers**
+   - 현재 PyTorch 의존성 문제로 임시 비활성화
+   - CPU 환경에서는 설치 후 주석 해제
 
-# API 키 재설정
-echo 'OPENAI_API_KEY = "your_actual_api_key"' > .streamlit/secrets.toml
-```
+2. **FAISS 인덱스 로드 실패**
+   - `python scripts/build_index.py` 재실행
+   - 데이터 파일 경로 확인
 
-**Streamlit Cloud:**
-1. 앱 페이지에서 "Settings" 클릭
-2. "Secrets" 탭에서 API 키 확인/수정
+3. **OpenAI API 오류**
+   - API 키 확인
+   - 사용량 한도 확인
 
-### "관련 문헌이 검색되지 않았습니다" 경고
+## 📝 라이센스
 
-1. 꿈 내용을 더 구체적으로 기술
-2. 상징적 요소나 감정을 포함하여 재시도
-3. 여러 번 시도하여 다른 각도로 검색
+이 프로젝트는 교육 목적으로 제작되었습니다.
 
-### 인덱스 파일 오류
+## 🤝 기여하기
 
-```bash
-# 인덱스 재생성
-rm -rf index/
-python scripts/build_index.py
-```
-
-### 세그멘테이션 폴트 (macOS)
-
-sentence-transformers와 PyTorch 호환성 문제:
-
-```bash
-# Python 3.11 환경 사용
-conda create -n dream_bot python=3.11
-conda activate dream_bot
-pip install -r requirements.txt
-```
-
-## 🔒 보안 가이드
-
-### API 키 보호
-- **✅ 안전**: `.streamlit/secrets.toml`에 저장 (`.gitignore`로 보호됨)
-- **❌ 위험**: 코드 내에 하드코딩, `.env` 파일을 깃허브에 업로드
-- **확인 방법**: `git status`에서 `secrets.toml`이 나타나지 않아야 함
-
-### 깃허브 업로드 전 체크리스트
-```bash
-# 1. API 키가 보호되는지 확인
-git status | grep secrets.toml  # 아무것도 출력되지 않아야 함
-
-# 2. 민감한 파일들이 제외되었는지 확인
-cat .gitignore | grep -E "(secrets|\.env|\.key)"
-
-# 3. 깨끗한 상태로 커밋
-git add .
-git commit -m "Add Freud dream interpretation app"
-git push origin main
-```
-
-## 📚 프로이트 이론 배경
-
-이 앱에서 사용하는 주요 정신분석 개념들:
-
-- **무의식**: 의식 밖에 있는 정신 영역
-- **꿈의 응축**: 여러 생각이 하나의 상징으로 압축
-- **꿈의 전치**: 중요한 내용이 사소한 것으로 변장
-- **상징화**: 무의식적 욕망의 우회적 표현
-- **억압**: 받아들이기 어려운 충동의 무의식 속 저장
-
-## 📜 라이선스 및 저작권
-
-- **코드**: 개인 프로젝트 (특정 라이선스 미지정)
-- **데이터**:
-  - Freud's "The Interpretation of Dreams": Public Domain (저작권 만료)
-- **AI 모델**: 
-  - OpenAI GPT-4.1: OpenAI API 이용약관
-  - intfloat/multilingual-e5-base: MIT License
-
-## 🤝 기여 방법
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/DreamFeature`)
-3. Commit your changes (`git commit -m 'Add dream interpretation feature'`)
-4. Push to the branch (`git push origin feature/DreamFeature`)
-5. Open a Pull Request
-
-## 📞 문의
-
-질문이나 제안사항이 있으시면 Issues를 통해 알려주세요!
+1. 이슈 생성 또는 기능 제안
+2. 포크 후 개발
+3. 풀 리퀘스트 생성
+4. 코드 리뷰 및 병합
 
 ---
 
-Made with 🎭 for exploring the unconscious mind through dreams 
+**팀 프로젝트 진행 상황**
+- [ ] 데이터 전처리 완료
+- [ ] 벡터 인덱스 최적화
+- [ ] 프롬프트 엔지니어링
+- [ ] UI/UX 개선
+- [ ] 성능 테스트
+- [ ] 배포 준비 

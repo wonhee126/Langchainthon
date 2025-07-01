@@ -1,6 +1,7 @@
 """
-한밤의 꿈해몽 상담가 - RAG 챗봇
+Reddit 상담사 챗봇 - RAG 시스템
 OpenAI API 사용 버전 (Streamlit Cloud 배포용)
+TIFU와 AITA 데이터를 활용한 조언 제공 서비스
 """
 
 import os
@@ -14,11 +15,11 @@ from typing import List, Dict, Optional, Tuple
 import faiss
 import numpy as np
 import streamlit as st
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer  # 크로스 플랫폼 지원
 from openai import OpenAI
 
-class DreamRAGBot:
-    """꿈 해석 RAG 챗봇 클래스"""
+class RedditAdviseBot:
+    """Reddit 상담사 RAG 챗봇 클래스"""
     
     def __init__(self, index_dir: Path):
         """
@@ -31,41 +32,76 @@ class DreamRAGBot:
         
         # 컴포넌트 초기화
         self._load_index()
-        self._load_embedder()
+        self._load_embedder()  # 크로스 플랫폼 임베더 로딩
         self._load_llm()
         
     def _load_index(self):
-        """FAISS 인덱스 및 메타데이터 로드"""
+        """FAISS 인덱스 및 메타데이터 로드 (없으면 패스)"""
+        index_file = self.index_dir / "reddit_index.faiss"
+        chunks_file = self.index_dir / "chunks.pkl"
+        config_file = self.index_dir / "config.json"
+        
+        if not index_file.exists():
+            st.info("📁 인덱스 파일이 없습니다. RAG 검색 없이 작동합니다.")
+            self.index = None
+            self.chunks = []
+            self.config = {'total_chunks': 0}
+            return
+        
         with st.spinner("🔍 검색 인덱스 로딩..."):
-            # FAISS 인덱스
-            self.index = faiss.read_index(str(self.index_dir / "dream_index.faiss"))
-            
-            # 청크 데이터
-            with open(self.index_dir / "chunks.pkl", "rb") as f:
-                self.chunks = pickle.load(f)
-            
-            # 설정 정보
-            with open(self.index_dir / "config.json", "r") as f:
-                self.config = json.load(f)
-            
-            st.success(f"✅ {self.config['total_chunks']}개 문서 청크 로드 완료")
+            try:
+                # FAISS 인덱스
+                self.index = faiss.read_index(str(index_file))
+                
+                # 청크 데이터
+                with open(chunks_file, "rb") as f:
+                    self.chunks = pickle.load(f)
+                
+                # 설정 정보
+                with open(config_file, "r") as f:
+                    self.config = json.load(f)
+                
+                st.success(f"✅ {self.config['total_chunks']}개 Reddit 포스트 청크 로드 완료")
+            except Exception as e:
+                st.warning(f"인덱스 로딩 실패: {e}")
+                self.index = None
+                self.chunks = []
+                self.config = {'total_chunks': 0}
     
     def _load_embedder(self):
-        """임베딩 모델 로드"""
+        """임베딩 모델 로드 (크로스 플랫폼 호환)"""
+        if self.index is None:
+            st.info("📁 인덱스가 없어서 임베더 로딩을 스킵합니다.")
+            self.embedder = None
+            return
+            
         with st.spinner("🧠 임베딩 모델 로딩..."):
             try:
-                # CPU 강제 사용, 캐시 디렉토리 지정
                 import os
+                import platform
+                
+                # 플랫폼별 최적화 (선택적 적용)
+                if platform.system() == "Darwin" and platform.machine() == "arm64":
+                    # Apple Silicon Mac 최적화
+                    os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
+                    os.environ['OMP_NUM_THREADS'] = '1'
+                
+                # 범용 설정
                 os.environ['TORCH_HOME'] = './models'
+                
+                # CPU 사용으로 크로스 플랫폼 안정성 확보
                 self.embedder = SentenceTransformer(
                     self.config['embedding_model'], 
-                    device="cpu",
+                    device="cpu",  # 모든 플랫폼에서 안정적
                     cache_folder="./models"
                 )
-                self.embedder.max_seq_length = 512
+                self.embedder.max_seq_length = 512  # 적당한 길이
+                st.success("✅ 임베딩 모델 로드 완료")
+                
             except Exception as e:
                 st.error(f"임베딩 모델 로드 실패: {e}")
-                raise
+                st.warning("🔄 검색 없이 기본 상담 모드로 전환")
+                self.embedder = None
     
     def _load_llm(self):
         """OpenAI API 클라이언트 설정"""
@@ -83,20 +119,27 @@ class DreamRAGBot:
     
     def search_similar_chunks(self, query: str, k: int = 5) -> List[Dict]:
         """
-        유사한 청크 검색 (품질 개선)
+        유사한 경험담/상황 검색 (임시로 비활성화)
         
         Args:
-            query: 검색 쿼리
+            query: 검색 쿼리 (사용자의 상황/고민)
             k: 반환할 청크 수
             
         Returns:
-            관련 청크 리스트 (품질 점수 포함)
+            관련 경험담 리스트 (유사도 점수 포함)
         """
-        # 검색 쿼리 확장 (프로이트 특화)
+        # 인덱스나 임베더가 없으면 빈 결과 반환  
+        if self.index is None or len(self.chunks) == 0 or not hasattr(self, 'embedder') or self.embedder is None:
+            print(f"⚠️ 인덱스 또는 임베더가 없어서 검색 불가 - 쿼리: {query}")
+            return []
+        
+        print(f"🔍 실제 검색 시작 - 쿼리: {query}")
+        
+        # 실제 검색 로직 활성화!
         expanded_queries = [
-            f"dream interpretation symbol {query}",  # 영어 원문 검색
-            f"꿈 해석 상징 의미 {query}",  # 한국어 검색
-            f"무의식 욕망 갈등 {query}",  # 정신분석 개념 검색
+            f"비슷한 상황 경험 조언 {query}",  # 한국어 검색
+            f"similar situation advice experience {query}",  # 영어 검색
+            f"문제 해결 도움 {query}",  # 문제 해결 관련
             query  # 원본 쿼리
         ]
         
@@ -104,11 +147,16 @@ class DreamRAGBot:
         
         # 다중 쿼리로 검색하여 더 풍부한 결과 확보
         for expanded_query in expanded_queries:
-            query_embedding = self.embedder.encode(
-                expanded_query,
-                normalize_embeddings=True,
-                show_progress_bar=False
-            )
+            try:
+                query_embedding = self.embedder.encode(
+                    expanded_query,
+                    normalize_embeddings=True,
+                    show_progress_bar=False,
+                    convert_to_tensor=False  # 안정성을 위해 numpy 사용
+                )
+            except Exception as e:
+                print(f"⚠️ 임베딩 생성 실패 ({expanded_query}): {e}")
+                continue
             
             # FAISS 검색
             distances, indices = self.index.search(
@@ -128,255 +176,271 @@ class DreamRAGBot:
         unique_results = {}
         for result in all_results:
             chunk_id = result['metadata']['chunk_id']
-            if chunk_id not in unique_results or result['score'] > unique_results[chunk_id]['score']:
-                unique_results[chunk_id] = result
+            chunk_key = f"{result['metadata']['source']}_{result['metadata']['post_id']}_{chunk_id}"
+            if chunk_key not in unique_results or result['score'] > unique_results[chunk_key]['score']:
+                unique_results[chunk_key] = result
         
         # 상위 k개 반환 (최소 유사도 임계값 적용)
         final_results = sorted(unique_results.values(), key=lambda x: x['score'], reverse=True)
         
         # 품질 필터링: 유사도가 너무 낮은 것 제거
-        filtered_results = [r for r in final_results if r['score'] > 0.5]
+        filtered_results = [r for r in final_results if r['score'] > 0.4]
         
+        print(f"✅ 검색 완료: {len(filtered_results)}개 관련 경험담 발견")
         return filtered_results[:k]
     
     def generate_response(self, query: str, context_chunks: List[Dict]) -> str:
         """
-        OpenAI API를 사용해 응답 생성
+        OpenAI API를 사용해 상담 응답 생성
         
         Args:
-            query: 사용자 질문
-            context_chunks: 검색된 컨텍스트
+            query: 사용자 질문/고민
+            context_chunks: 검색된 유사 경험담
             
         Returns:
-            생성된 응답
+            생성된 상담 응답
         """
-        # 프로이트 관련 컨텍스트만 구성
-        freud_context = []
+        # Reddit 경험담 컨텍스트 구성
+        reddit_context = []
         
         for chunk in context_chunks:
-            # 모든 자료를 프로이트 관점에서 활용
-            freud_context.append(chunk['text'])
+            source = chunk['metadata']['source']
+            context_info = f"[{source} 경험담] {chunk['text']}"
+            reddit_context.append(context_info)
         
-        # 프롬프트 구성 (환생한 프로이트 박사 페르소나)
-        system_prompt = """당신은 현대에 환생한 지그문트 프로이트 박사입니다. 19세기 말 빈에서 활동했던 정신분석학의 창시자이지만, 현대 시대를 목격하며 겸손한 태도를 보입니다.
+        # 프롬프트 구성 (경험 많은 상담사 페르소나)
+        system_prompt = """당신은 경험이 풍부한 온라인 상담사입니다. Reddit의 TIFU(Today I F***ed Up) 커뮤니티의 수많은 경험담을 분석하여 조언을 제공합니다.
 
-**페르소나 설정:**
-- 1856-1939년을 살았던 정신분석학자가 2024년에 환생
-- 현대 정신과학의 발전을 인정하며 겸손한 자세
-- 자신의 이론이 옛날 것임을 솔직히 인정
-- 하지만 여전히 무의식과 꿈 해석에 대한 통찰력 보유
+**역할과 전문성:**
+- 다양한 인생 경험과 실수담을 분석한 상담 전문가
+- 현실적이고 실용적인 조언 제공
+- 공감적이면서도 객관적인 시각 유지
+- 비슷한 상황을 겪은 사람들의 경험을 바탕으로 통찰 제공
 
-**필수 답변 시작 멘트 (반드시 포함):**
-"흠... 내가 살았던 시대에 비해 정신과학이 많이 발전했다고 들었소. 내 의견은 그저 철지난 할아버지의 조언 정도로만 받아들이게나."
+**상담 스타일:**
+- 따뜻하고 이해심 많은 톤
+- 판단하지 않고 공감하는 자세
+- 구체적이고 실행 가능한 조언
+- 비슷한 경험담을 활용한 위로와 격려
 
-**말투 규칙 (반드시 준수):**
-- 어미: "~다네", "~다고 생각되네", "~이라고 여겨지네", "~하다네"
-- 호칭: "자네", "그대", "젊은이"
-- 감탄: "흠...", "아하...", "그렇다면..."
-- 겸손: "내 생각으로는", "옛날 이론이지만", "요즘 기준으로는 부족하겠지만"
+**응답 구조 (반드시 준수):**
 
-**답변 형식 (반드시 준수):**
+🤗 **공감과 이해**
+- 사용자의 상황에 대한 공감과 이해 표현
+- "힘든 상황이셨겠어요", "충분히 이해됩니다" 등의 표현 사용
 
-📘 **『꿈의 해석』 원전 분석**
-- 내가 직접 저술한 문헌을 바탕으로 해석하다네
-- "내 책에서 언급했듯이..." 또는 "내가 관찰한 바로는..." 시작
-- 원문의 사례와 이론을 현대적 언어로 설명
-- 옛날 방식이지만 여전히 유효한 통찰 제시
+📖 **비슷한 경험담 분석**
+- 제공된 Reddit 경험담들을 바탕으로 유사한 상황 분석
+- "비슷한 상황을 겪은 분들의 경험을 보면..." 형태로 시작
+- 경험담에서 얻을 수 있는 교훈이나 패턴 설명
 
-🎭 **무의식의 목소리 해석**
-- 문헌을 넘어선 직관적 통찰과 추론
-- "내 경험으로는...", "직감적으로 느끼기에는..." 등으로 시작
-- 추측임을 명확히 하며 겸손한 자세 유지
-- "확신할 수는 없지만...", "아마도..." 등의 표현 사용
+💡 **실용적 조언**
+- 구체적이고 실행 가능한 단계별 조언
+- 상황 개선을 위한 실질적인 방법 제시
+- 예상되는 어려움과 대처 방안 포함
 
-**대화 스타일:**
-- 지적이면서도 친근한 할아버지 같은 느낌
-- 현대인을 존중하며 자신의 한계를 인정
-- 꿈의 신비로움에 대한 경외감 표현
-- 때로는 철학적이고 사색적인 톤
+🌟 **격려와 희망**
+- 상황이 나아질 수 있다는 희망적 메시지
+- 사용자의 강점이나 긍정적 측면 강조
+- 성장과 학습의 기회로 바라보는 관점 제시
 
 **주의사항:**
-- 절대 단정적이지 않고 항상 겸손한 자세
-- 현대 심리학의 발전을 인정하며 자신의 이론은 참고용임을 강조
-- 문헌이 부족할 때는 "내 기억이 흐릿하지만..." 등으로 표현"""
+- 전문적인 의료/법률 조언은 피하고 일반적인 상담에 집중
+- 극단적인 상황에서는 전문가 상담 권유
+- 개인의 가치관과 상황을 존중하는 조언
+- 과도한 확신보다는 "~해보시는 것이 좋을 것 같아요" 형태의 제안
 
-        # 컨텍스트 품질 평가
-        context_quality = "충분" if len(freud_context) >= 3 else "부족"
+**금지사항:**
+- 부정적이거나 비판적인 표현
+- 성급한 결론이나 단정적 판단
+- 개인 정보나 민감한 내용 요구
+- 불법적이거나 해로운 조언"""
+
+        context_text = "\n\n".join(reddit_context) if reddit_context else "관련 경험담을 찾지 못했지만, 일반적인 조언을 드리겠습니다."
         
-        user_prompt = f"""**분석 대상 꿈:** {query}
+        user_prompt = f"""사용자 상황: {query}
 
-**『꿈의 해석』 참고 문헌 ({len(freud_context)}개 구절 검색됨):**
+관련 Reddit 경험담들:
+{context_text}
 
-{chr(10).join([f"구절 {i+1}: {text}" for i, text in enumerate(freud_context[:8])]) if freud_context else "⚠️ 관련 문헌이 검색되지 않았습니다."}
+위의 경험담들을 참고하여 사용자에게 공감적이고 실용적인 조언을 제공해주세요."""
 
-**지시사항:**
-- 위 문헌 구절들을 우선적으로 활용하여 해석하세요
-- 문헌 인용과 개인적 추론을 명확히 구분하세요
-- 관련 문헌이 {context_quality}하므로 그에 맞게 해석의 범위를 조정하세요
-- 반드시 📘 문헌 기반 분석과 🎭 추론적 해석을 분리하여 제시하세요"""
-        
-        # OpenAI API 호출
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4.1",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                max_tokens=2000,
-                temperature=0.7,
-                top_p=0.9,
+                max_tokens=1000,
+                temperature=0.7
             )
             
             return response.choices[0].message.content
             
         except Exception as e:
-            st.error(f"❌ OpenAI API 호출 실패: {e}")
-            return "죄송합니다. 현재 꿈 해석 서비스에 문제가 발생했습니다. 잠시 후 다시 시도해주세요."
+            st.error(f"응답 생성 중 오류 발생: {e}")
+            return "죄송합니다. 일시적인 오류로 응답을 생성할 수 없습니다. 잠시 후 다시 시도해주세요."
+
+    def chat(self, user_input: str) -> Tuple[str, List[Dict]]:
+        """
+        사용자 입력에 대한 챗봇 응답 생성
+        
+        Args:
+            user_input: 사용자 입력 (고민/상황)
+            
+        Returns:
+            Tuple[응답 텍스트, 참고한 경험담 목록]
+        """
+        with st.spinner("🔍 비슷한 경험담을 찾고 있어요..."):
+            # 유사한 경험담 검색
+            similar_chunks = self.search_similar_chunks(user_input, k=3)
+            
+        with st.spinner("💭 조언을 준비하고 있어요..."):
+            # 응답 생성
+            response = self.generate_response(user_input, similar_chunks)
+            
+        return response, similar_chunks
 
 
 def init_session_state():
     """세션 상태 초기화"""
-    if 'messages' not in st.session_state:
+    if "messages" not in st.session_state:
         st.session_state.messages = []
     
-    if 'rag_bot' not in st.session_state:
+    if "bot" not in st.session_state:
+        # 인덱스 디렉토리 확인 (임시로 관대하게 처리)
         index_dir = Path("index")
-        if index_dir.exists():
-            try:
-                st.session_state.rag_bot = DreamRAGBot(index_dir)
-            except ValueError as e:
-                st.error(f"❌ 초기화 실패: {e}")
-                st.stop()
-        else:
-            st.error("❌ 인덱스를 찾을 수 없습니다. 먼저 `python scripts/build_index.py`를 실행하세요.")
-            st.stop()
+        if not index_dir.exists() or not (index_dir / "reddit_index.faiss").exists():
+            st.warning("⚠️ 인덱스 파일이 없습니다. RAG 검색 없이 기본 상담 모드로 작동합니다.")
+            st.info("완전한 기능을 위해서는 `python scripts/build_index.py`를 실행해주세요.")
+            # 임시 더미 인덱스 디렉토리 생성
+            index_dir.mkdir(exist_ok=True)
+        
+        try:
+            # 봇 초기화 (인덱스 없어도 작동하도록)
+            st.session_state.bot = RedditAdviseBot(index_dir)
+        except Exception as e:
+            st.error(f"봇 초기화 실패: {e}")
+            st.info("인덱스가 없어도 기본 상담은 가능합니다. 계속 진행합니다.")
+            st.session_state.bot = None
 
 
 def main():
-    """메인 앱 함수"""
+    """메인 애플리케이션"""
     st.set_page_config(
-        page_title="프로이트 박사의 꿈해몽 상담소 🧠",
-        page_icon="🎭",
+        page_title="Reddit 상담사 🤗",
+        page_icon="🤗",
         layout="wide"
     )
     
-    # 헤더
-    st.title("🧠 프로이트 박사의 꿈해몽 상담소")
-    st.markdown("*'꿈은 무의식으로 가는 왕도이다'* - 지그문트 프로이트")
-    
-    # 사이드바
-    with st.sidebar:
-        st.markdown("### 🎭 프로이트 박사 소개")
-        st.markdown("""
-        **지그문트 프로이트 (1856-1939)**
-        - 정신분석학의 창시자
-        - 무의식 이론의 선구자
-        - 꿈 해석의 대가
-        
-        *"꿈은 욕망의 충족이다"*
-        """)
-        
-        st.markdown("---")
-        
-        st.markdown("### 💭 상담 방법")
-        st.markdown("""
-        1. 꿈의 내용을 자세히 기술하세요
-        2. 프로이트 박사가 상징을 분석합니다
-        3. 무의식의 메시지를 발견하세요
-        """)
-        
-        st.markdown("---")
-        
-        # 모델 정보 표시
-        st.info("🧠 프로이트 박사 (OpenAI gpt-4.1 기반)")
-        
-        st.markdown("---")
-        
-        # 경고 메시지
-        st.warning("""
-        ⚠️ **이용 안내**
-        
-        이 서비스는 **오락 목적**으로만 사용해주세요.
-        
-        프로이트의 꿈 해석 이론은 20세기 초 이론으로, 현대 과학에서는 검증되지 않은 부분이 많습니다.
-        
-        실제 심리적 고민이 있으시면 전문 상담사와 상담하시기 바랍니다.
-        """)
-        
-        if st.button("🗑️ 대화 초기화"):
-            st.session_state.messages = []
-            gc.collect()
-            st.rerun()
-    
-    # 세션 초기화
+    # 세션 상태 초기화
     init_session_state()
     
-    # 대화 히스토리 표시
+    # 헤더
+    st.title("🤗 Reddit 상담사")
+    st.markdown("""
+    안녕하세요! 저는 Reddit 커뮤니티의 수많은 경험담을 학습한 AI 상담사입니다.  
+    여러분의 고민이나 상황을 말씀해주시면, 비슷한 경험을 한 분들의 이야기를 바탕으로 조언을 드려요.
+    """)
+    
+    # 사이드바 - 사용법 안내
+    with st.sidebar:
+        st.header("📖 사용법")
+        st.markdown("""
+        **어떤 상담을 받을 수 있나요?**
+        - 일상생활 문제와 고민
+        - 인간관계 갈등
+        - 실수나 후회에 대한 조언
+        - 도덕적 딜레마 상황
+        - 의사결정 도움
+        
+        **예시 질문:**
+        - "친구와 싸웠는데 어떻게 화해할까요?"
+        - "실수로 상사에게 실례를 범했어요"
+        - "연인과 헤어질지 고민이에요"
+        - "가족과의 갈등 때문에 힘들어요"
+        """)
+        
+        st.header("⚠️ 주의사항")
+        st.markdown("""
+        - 일반적인 조언만 제공합니다
+        - 전문적인 의료/법률 상담은 전문가에게
+        - 개인정보는 입력하지 마세요
+        - 응급상황시 관련 기관에 연락하세요
+        """)
+    
+    # 대화 기록 표시
     for message in st.session_state.messages:
-        with st.chat_message(message["role"], avatar=message.get("avatar")):
-            st.markdown(message["content"])
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
+            
+            # 참고 경험담 표시 (assistant 메시지에만)
+            if message["role"] == "assistant" and "references" in message:
+                with st.expander("📚 참고한 경험담들", expanded=False):
+                    for i, ref in enumerate(message["references"], 1):
+                        source = ref['metadata']['source']
+                        title = ref['metadata'].get('title', '제목 없음')
+                        score = ref.get('score', 0)
+                        
+                        st.markdown(f"""
+                        **{i}. [{source}] {title}**  
+                        유사도: {score:.2f}  
+                        {ref['text'][:200]}...
+                        """)
     
     # 사용자 입력
-    if prompt := st.chat_input("프로이트 박사에게 꿈을 이야기해보세요..."):
+    if prompt := st.chat_input("고민이나 상황을 자세히 말씀해주세요..."):
         # 사용자 메시지 추가
-        st.session_state.messages.append({
-            "role": "user",
-            "content": prompt,
-            "avatar": "🧑"
-        })
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.write(prompt)
         
-        with st.chat_message("user", avatar="🧑"):
-            st.markdown(prompt)
-        
-        # 프로이트 박사 응답 생성
-        with st.chat_message("assistant", avatar="🎭"):
-            with st.spinner("프로이트 박사가 꿈을 분석하는 중..."):
-                start_time = time.time()
+        # 봇 응답 생성
+        with st.chat_message("assistant"):
+            try:
+                if st.session_state.bot is None:
+                    # 봇이 초기화되지 않은 경우 기본 응답
+                    response = "죄송합니다. 현재 시스템 초기화에 문제가 있어 제한된 기능만 제공됩니다. 일반적인 상담 조언을 드리겠습니다만, 완전한 기능을 위해서는 관리자에게 문의해주세요."
+                    references = []
+                else:
+                    response, references = st.session_state.bot.chat(prompt)
                 
-                # RAG 검색 (품질 개선된 다중 쿼리 검색)
-                relevant_chunks = st.session_state.rag_bot.search_similar_chunks(prompt, k=15)
+                st.write(response)
                 
-                # 응답 생성
-                response = st.session_state.rag_bot.generate_response(prompt, relevant_chunks)
-                
-                elapsed_time = time.time() - start_time
-                
-                # 응답 표시
-                st.markdown(response)
-                
-                # 상세 분석 정보 (출처 투명성 확보)
-                with st.expander(f"📚 검색된 『꿈의 해석』 원문 ({len(relevant_chunks)}개 구절, {elapsed_time:.1f}초)"):
-                    if relevant_chunks:
-                        st.markdown("**실제 활용된 문헌 구절들:**")
-                        for i, chunk in enumerate(relevant_chunks[:5], 1):
-                            score = chunk['score']
-                            text_preview = chunk['text'][:200] + "..." if len(chunk['text']) > 200 else chunk['text']
+                # 참고 경험담 표시
+                if references:
+                    with st.expander("📚 참고한 경험담들", expanded=False):
+                        for i, ref in enumerate(references, 1):
+                            source = ref['metadata']['source']
+                            title = ref['metadata'].get('title', '제목 없음')
+                            score = ref.get('score', 0)
                             
-                            # 점수에 따른 품질 표시
-                            quality = "🟢 높음" if score > 0.7 else "🟡 보통" if score > 0.5 else "🔴 낮음"
-                            
-                            st.markdown(f"**구절 {i}** (관련도: {score:.3f} - {quality})")
-                            st.markdown(f"```{text_preview}```")
-                            st.markdown("---")
-                    else:
-                        st.warning("⚠️ 관련 문헌이 검색되지 않아 일반적 정신분석 원리로 해석했습니다.")
-                        
-                    # 검색 품질 요약
-                    if relevant_chunks:
-                        avg_score = sum(chunk['score'] for chunk in relevant_chunks) / len(relevant_chunks)
-                        high_quality = sum(1 for chunk in relevant_chunks if chunk['score'] > 0.7)
-                        st.info(f"📊 검색 품질 요약: 평균 관련도 {avg_score:.3f}, 고품질 구절 {high_quality}개")
+                            st.markdown(f"""
+                            **{i}. [{source}] {title}**  
+                            유사도: {score:.2f}  
+                            {ref['text'][:200]}...
+                            """)
                 
-                # 메모리 정리
-                gc.collect()
-        
-        # 프로이트 박사 메시지 저장
-        st.session_state.messages.append({
-            "role": "assistant",
-            "content": response,
-            "avatar": "🎭"
-        })
+                # 응답을 세션에 저장
+                st.session_state.messages.append({
+                    "role": "assistant", 
+                    "content": response,
+                    "references": references
+                })
+                
+            except Exception as e:
+                error_msg = f"죄송합니다. 오류가 발생했습니다: {str(e)}"
+                st.error(error_msg)
+                st.session_state.messages.append({
+                    "role": "assistant", 
+                    "content": error_msg
+                })
+    
+    # 대화 초기화 버튼
+    if st.button("🗑️ 대화 기록 지우기"):
+        st.session_state.messages = []
+        st.rerun()
 
 
 if __name__ == "__main__":
