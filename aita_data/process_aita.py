@@ -3,7 +3,7 @@ import json
 from collections import defaultdict
 
 # 데이터베이스 연결
-conn = sqlite3.connect('iffelton/AmItheAsshole.sqlite')
+conn = sqlite3.connect('aita_data/AmItheAsshole.sqlite')
 # 결과를 딕셔너리 형태로 받기 위해 row_factory 설정
 conn.row_factory = sqlite3.Row
 cursor = conn.cursor()
