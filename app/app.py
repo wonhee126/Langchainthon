@@ -90,9 +90,11 @@ class RedditAdviseBot:
                 os.environ['TORCH_HOME'] = './models'
                 
                 # CPU 사용으로 크로스 플랫폼 안정성 확보
+                import torch
+                device = "mps" if torch.backends.mps.is_available() else "cpu"
                 self.embedder = SentenceTransformer(
                     self.config['embedding_model'], 
-                    device="cpu",  # 모든 플랫폼에서 안정적
+                    device=device,  # 모든 플랫폼에서 안정적
                     cache_folder="./models"
                 )
                 self.embedder.max_seq_length = 512  # 적당한 길이
@@ -116,6 +118,23 @@ class RedditAdviseBot:
             
             self.client = OpenAI(api_key=api_key)
             st.success("✅ OpenAI API 클라이언트 설정 완료")
+    
+    def _translate_to_korean(self, text: str) -> str:
+        """영어 텍스트를 한국어로 번역"""
+        try:
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a translator that converts English Reddit posts to natural Korean. Keep the original meaning and tone."},
+                    {"role": "user", "content": f"Translate this to Korean: {text}"}
+                ],
+                max_tokens=500,
+                temperature=0.3
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"번역 오류: {e}")
+            return text  # 번역 실패시 원문 반환
     
     def search_similar_chunks(self, query: str, k: int = 5) -> List[Dict]:
         """
@@ -191,79 +210,113 @@ class RedditAdviseBot:
     
     def generate_response(self, query: str, context_chunks: List[Dict]) -> str:
         """
-        OpenAI API를 사용해 상담 응답 생성
+        OpenAI API를 사용해 AITA 스타일 판정 및 상담 응답 생성
         
         Args:
             query: 사용자 질문/고민
             context_chunks: 검색된 유사 경험담
             
         Returns:
-            생성된 상담 응답
+            생성된 응답
         """
-        # Reddit 경험담 컨텍스트 구성
-        reddit_context = []
+        from collections import Counter
+        
+        # 판정 집계
+        verdicts = []
+        verdict_explanations = []
         
         for chunk in context_chunks:
-            source = chunk['metadata']['source']
-            context_info = f"[{source} 경험담] {chunk['text']}"
-            reddit_context.append(context_info)
+            verdict = chunk['metadata'].get('verdict', 'UNKNOWN')
+            if verdict != 'UNKNOWN':
+                verdicts.append(verdict)
+                # 간단한 설명 추가
+                title_ko = self._translate_to_korean(chunk['metadata'].get('title', ''))
+                verdict_explanations.append(f"'{title_ko[:50]}...' → {verdict}")
         
-        # 프롬프트 구성 (경험 많은 상담사 페르소나)
-        system_prompt = """당신은 경험이 풍부한 온라인 상담사입니다. Reddit의 TIFU(Today I F***ed Up) 커뮤니티의 수많은 경험담을 분석하여 조언을 제공합니다.
+        # 판정 결과 계산
+        if verdicts:
+            verdict_counts = Counter(verdicts)
+            final_verdict = verdict_counts.most_common(1)[0][0]
+            verdict_summary = ", ".join([f"{v}: {c}표" for v, c in verdict_counts.items()])
+        else:
+            final_verdict = "INFO"
+            verdict_summary = "판정 정보 부족"
+        
+        # 판정 의미 설명
+        verdict_meanings = {
+            "YTA": "You're the A-hole (당신이 잘못했어요)",
+            "NTA": "Not the A-hole (당신은 잘못하지 않았어요)", 
+            "ESH": "Everyone Sucks Here (모두가 잘못했어요)",
+            "NAH": "No A-holes Here (아무도 잘못하지 않았어요)",
+            "INFO": "Not Enough Info (정보가 부족해요)"
+        }
+        
+        # Reddit 경험담을 문맥으로 구성 (번역 포함)
+        reddit_context = []
+        for i, chunk in enumerate(context_chunks, 1):
+            metadata = chunk['metadata']
+            source = metadata['source']
+            title_ko = self._translate_to_korean(metadata.get('title', '제목 없음'))
+            content_ko = self._translate_to_korean(chunk['text'][:300])  # 긴 내용은 앞부분만
+            score = metadata.get('score', 0)
+            verdict = metadata.get('verdict', 'UNKNOWN')
+            
+            # 상위 댓글 추가 (판정 근거로 활용)
+            comments_text = ""
+            comments = metadata.get('comments', [])
+            if comments:
+                # 점수 기준 상위 2개 댓글만 포함
+                top_comments = sorted(comments, key=lambda x: x.get('score', 0), reverse=True)[:2]
+                for j, comment in enumerate(top_comments, 1):
+                    comment_ko = self._translate_to_korean(comment.get('message', '')[:200])
+                    comment_score = comment.get('score', 0)
+                    comments_text += f"\n상위댓글{j}: {comment_ko}... (👍 {comment_score})"
+            
+            context_text = f"""
+경험담 {i} [{source}]:
+제목: {title_ko}
+내용: {content_ko}...
+Reddit 점수: {score}
+커뮤니티 판정: {verdict}{comments_text}
+"""
+            reddit_context.append(context_text.strip())
 
-**역할과 전문성:**
-- 다양한 인생 경험과 실수담을 분석한 상담 전문가
-- 현실적이고 실용적인 조언 제공
-- 공감적이면서도 객관적인 시각 유지
-- 비슷한 상황을 겪은 사람들의 경험을 바탕으로 통찰 제공
+        # 시스템 프롬프트 (AITA 재판관 역할)
+        system_prompt = f"""당신은 Reddit AITA(Am I The A-hole) 커뮤니티의 판례를 학습한 **AI 재판관**입니다. 배석 판사 없이 단독으로 사건을 심리합니다.
 
-**상담 스타일:**
-- 따뜻하고 이해심 많은 톤
-- 판단하지 않고 공감하는 자세
-- 구체적이고 실행 가능한 조언
-- 비슷한 경험담을 활용한 위로와 격려
+[재판관 어투 지침]
+- 전문 법조인의 공식·엄숙한 말투 사용
+- 첫 문단은 반드시 "본 안건은 …" 형태로 사건 요지를 정리
+- 판결문 말미에 **주문** 섹션 추가: "주문. 피고인을 YTA로 판결한다."와 같은 형식
+- 필요한 경우 "판시사항", "판단 근거" 항목을 포함
+- 불필요한 감정 표현, 농담, 캐주얼한 표현 금지
 
-**응답 구조 (반드시 준수):**
+[판결문 권장 구조]
+1. 서론: "본 안건은 …" (사건 요지)
+2. 판시사항
+3. 판단 근거 (관계 법령·판례·댓글 인용)
+4. 주문 (최종 판정: YTA/NTA/ESH/NAH/INFO)
+5. 필요 시 조언 또는 부대 의견
 
-🤗 **공감과 이해**
-- 사용자의 상황에 대한 공감과 이해 표현
-- "힘든 상황이셨겠어요", "충분히 이해됩니다" 등의 표현 사용
+[판정 기준]
+- YTA (You're the A-hole): 사용자의 행동이 부적절하거나 잘못됨
+- NTA (Not the A-hole): 사용자는 잘못하지 않음, 상대방이나 상황이 문제
+- ESH (Everyone Sucks Here): 모든 당사자가 각각 잘못한 부분이 있음
+- NAH (No A-holes Here): 아무도 특별히 잘못하지 않음, 단순한 의견 차이나 불행한 상황
+- INFO (Not Enough Info): 판정하기에 정보가 부족함
+"""
 
-📖 **비슷한 경험담 분석**
-- 제공된 Reddit 경험담들을 바탕으로 유사한 상황 분석
-- "비슷한 상황을 겪은 분들의 경험을 보면..." 형태로 시작
-- 경험담에서 얻을 수 있는 교훈이나 패턴 설명
-
-💡 **실용적 조언**
-- 구체적이고 실행 가능한 단계별 조언
-- 상황 개선을 위한 실질적인 방법 제시
-- 예상되는 어려움과 대처 방안 포함
-
-🌟 **격려와 희망**
-- 상황이 나아질 수 있다는 희망적 메시지
-- 사용자의 강점이나 긍정적 측면 강조
-- 성장과 학습의 기회로 바라보는 관점 제시
-
-**주의사항:**
-- 전문적인 의료/법률 조언은 피하고 일반적인 상담에 집중
-- 극단적인 상황에서는 전문가 상담 권유
-- 개인의 가치관과 상황을 존중하는 조언
-- 과도한 확신보다는 "~해보시는 것이 좋을 것 같아요" 형태의 제안
-
-**금지사항:**
-- 부정적이거나 비판적인 표현
-- 성급한 결론이나 단정적 판단
-- 개인 정보나 민감한 내용 요구
-- 불법적이거나 해로운 조언"""
-
-        context_text = "\n\n".join(reddit_context) if reddit_context else "관련 경험담을 찾지 못했지만, 일반적인 조언을 드리겠습니다."
+        context_text = "\n\n".join(reddit_context) if reddit_context else "유사한 판례를 찾지 못했지만, 일반적인 도덕적 기준으로 판단해드리겠습니다."
         
         user_prompt = f"""사용자 상황: {query}
 
-관련 Reddit 경험담들:
+유사한 Reddit AITA 판례들:
 {context_text}
 
-위의 경험담들을 참고하여 사용자에게 공감적이고 실용적인 조언을 제공해주세요."""
+판정 집계 결과: {verdict_summary}
+주요 판정 경향: {final_verdict} ({verdict_meanings.get(final_verdict, final_verdict)})
+
+위의 판례들과 커뮤니티 의견을 참고하여, 사용자의 상황에 대해 공정한 AITA 판정을 내려주세요."""
 
         try:
             response = self.client.chat.completions.create(
@@ -338,36 +391,54 @@ def main():
     init_session_state()
     
     # 헤더
-    st.title("🤗 Reddit 상담사")
+    st.title("⚖️ AITA 재판부")
     st.markdown("""
-    안녕하세요! 저는 Reddit 커뮤니티의 수많은 경험담을 학습한 AI 상담사입니다.  
-    여러분의 고민이나 상황을 말씀해주시면, 비슷한 경험을 한 분들의 이야기를 바탕으로 조언을 드려요.
+    📜 **본 법정은 Reddit AITA 커뮤니티의 방대한 판례를 학습한 AI 재판관입니다.**  
+    사건의 사실관계를 진술하시면, 선례와 댓글을 근거로 **YTA/NTA/ESH/NAH** 중 하나의 판결을 선고하겠습니다.
     """)
+    
+    # AITA 약어 설명
+    with st.expander("📖 AITA 판정 기준", expanded=False):
+        st.markdown("""
+        **YTA** (You're the A-hole) - 당신이 잘못했어요  
+        **NTA** (Not the A-hole) - 당신은 잘못하지 않았어요  
+        **ESH** (Everyone Sucks Here) - 모두가 잘못했어요  
+        **NAH** (No A-holes Here) - 아무도 잘못하지 않았어요  
+        **INFO** (Not Enough Info) - 정보가 부족해요  
+        """)
     
     # 사이드바 - 사용법 안내
     with st.sidebar:
         st.header("📖 사용법")
         st.markdown("""
-        **어떤 상담을 받을 수 있나요?**
-        - 일상생활 문제와 고민
-        - 인간관계 갈등
-        - 실수나 후회에 대한 조언
-        - 도덕적 딜레마 상황
-        - 의사결정 도움
+        **어떤 판정을 받을 수 있나요?**
+        - 인간관계 갈등 상황
+        - 도덕적/윤리적 딜레마
+        - 일상생활에서의 선택과 행동
+        - 가족, 친구, 연인과의 문제
+        - 직장이나 학교에서의 갈등
         
-        **예시 질문:**
-        - "친구와 싸웠는데 어떻게 화해할까요?"
-        - "실수로 상사에게 실례를 범했어요"
-        - "연인과 헤어질지 고민이에요"
-        - "가족과의 갈등 때문에 힘들어요"
+        **예시 상황:**
+        - "친구 결혼식에 못 간다고 했는데..."
+        - "룸메이트가 청소를 안 해서 화냈어요"
+        - "부모님이 원하지 않는 선택을 했어요"
+        - "남자친구와 돈 문제로 싸웠어요"
+        """)
+        
+        st.header("⚖️ 판정 방식")
+        st.markdown("""
+        - Reddit AITA 커뮤니티 판례 분석
+        - 비슷한 상황의 집단 지성 활용
+        - 공정하고 객관적인 도덕적 판단
+        - 건설적인 해결책 제시
         """)
         
         st.header("⚠️ 주의사항")
         st.markdown("""
-        - 일반적인 조언만 제공합니다
-        - 전문적인 의료/법률 상담은 전문가에게
+        - 재미와 성찰을 위한 판정입니다
+        - 전문적인 상담은 전문가에게
         - 개인정보는 입력하지 마세요
-        - 응급상황시 관련 기관에 연락하세요
+        - 판정에 너무 의존하지 마세요
         """)
     
     # 대화 기록 표시
@@ -377,20 +448,69 @@ def main():
             
             # 참고 경험담 표시 (assistant 메시지에만)
             if message["role"] == "assistant" and "references" in message:
-                with st.expander("📚 참고한 경험담들", expanded=False):
-                    for i, ref in enumerate(message["references"], 1):
+                references = message["references"]
+                
+                # 판정 집계 표시
+                from collections import Counter
+                verdicts = [ref['metadata'].get('verdict', 'UNKNOWN') for ref in references if ref['metadata'].get('verdict', 'UNKNOWN') != 'UNKNOWN']
+                
+                if verdicts:
+                    verdict_counts = Counter(verdicts)
+                    st.markdown("### ⚖️ AITA 커뮤니티 판정 집계")
+                    
+                    # 판정 결과를 예쁘게 표시
+                    cols = st.columns(len(verdict_counts))
+                    for i, (verdict, count) in enumerate(verdict_counts.items()):
+                        with cols[i]:
+                            st.metric(verdict, f"{count}표")
+                
+                with st.expander("📚 참고한 경험담들 (한국어 번역)", expanded=False):
+                    for i, ref in enumerate(references, 1):
                         source = ref['metadata']['source']
                         title = ref['metadata'].get('title', '제목 없음')
                         score = ref.get('score', 0)
+                        verdict = ref['metadata'].get('verdict', 'UNKNOWN')
+                        reddit_score = ref['metadata'].get('score', 0)
+                        url = ref['metadata'].get('url', '')
+                        
+                        # 제목과 내용 번역 (봇이 있을 때만)
+                        if st.session_state.bot and hasattr(st.session_state.bot, '_translate_to_korean'):
+                            title_ko = st.session_state.bot._translate_to_korean(title)
+                            content_ko = st.session_state.bot._translate_to_korean(ref['text'][:300])
+                        else:
+                            title_ko = title
+                            content_ko = ref['text'][:300]
+                        
+                        # 링크 포함 제목
+                        if url:
+                            title_display = f"[{title_ko}]({url})"
+                        else:
+                            title_display = title_ko
                         
                         st.markdown(f"""
-                        **{i}. [{source}] {title}**  
-                        유사도: {score:.2f}  
-                        {ref['text'][:200]}...
+                        **{i}. [{source}] {title_display}**  
+                        유사도: {score:.3f} | Reddit 점수: {reddit_score} | 커뮤니티 판정: **{verdict}**  
+                        
+                        {content_ko}...
                         """)
+                        
+                        # 상위 댓글 표시
+                        comments = ref['metadata'].get('comments', [])
+                        if comments:
+                            st.markdown("**💬 주요 댓글들:**")
+                            top_comments = sorted(comments, key=lambda x: x.get('score', 0), reverse=True)[:3]
+                            for j, comment in enumerate(top_comments, 1):
+                                if st.session_state.bot and hasattr(st.session_state.bot, '_translate_to_korean'):
+                                    comment_ko = st.session_state.bot._translate_to_korean(comment.get('message', '')[:250])
+                                else:
+                                    comment_ko = comment.get('message', '')[:250]
+                                comment_score = comment.get('score', 0)
+                                st.markdown(f"- **댓글{j}:** {comment_ko}... _(👍 {comment_score})_")
+                        
+                        st.markdown("---")
     
     # 사용자 입력
-    if prompt := st.chat_input("고민이나 상황을 자세히 말씀해주세요..."):
+    if prompt := st.chat_input("판정받고 싶은 상황을 자세히 설명해주세요... (예: 내가 잘못한 걸까요?)"):
         # 사용자 메시지 추가
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
@@ -410,17 +530,64 @@ def main():
                 
                 # 참고 경험담 표시
                 if references:
-                    with st.expander("📚 참고한 경험담들", expanded=False):
+                    # 판정 집계 표시
+                    from collections import Counter
+                    verdicts = [ref['metadata'].get('verdict', 'UNKNOWN') for ref in references if ref['metadata'].get('verdict', 'UNKNOWN') != 'UNKNOWN']
+                    
+                    if verdicts:
+                        verdict_counts = Counter(verdicts)
+                        st.markdown("### ⚖️ AITA 커뮤니티 판정 집계")
+                        
+                        # 판정 결과를 예쁘게 표시
+                        cols = st.columns(len(verdict_counts))
+                        for i, (verdict, count) in enumerate(verdict_counts.items()):
+                            with cols[i]:
+                                st.metric(verdict, f"{count}표")
+                    
+                    with st.expander("📚 참고한 경험담들 (한국어 번역)", expanded=False):
                         for i, ref in enumerate(references, 1):
                             source = ref['metadata']['source']
                             title = ref['metadata'].get('title', '제목 없음')
                             score = ref.get('score', 0)
+                            verdict = ref['metadata'].get('verdict', 'UNKNOWN')
+                            reddit_score = ref['metadata'].get('score', 0)
+                            url = ref['metadata'].get('url', '')
+                            
+                            # 제목과 내용 번역 (실시간)
+                            if hasattr(st.session_state.bot, '_translate_to_korean'):
+                                title_ko = st.session_state.bot._translate_to_korean(title)
+                                content_ko = st.session_state.bot._translate_to_korean(ref['text'][:300])
+                            else:
+                                title_ko = title
+                                content_ko = ref['text'][:300]
+                            
+                            # 링크 포함 제목
+                            if url:
+                                title_display = f"[{title_ko}]({url})"
+                            else:
+                                title_display = title_ko
                             
                             st.markdown(f"""
-                            **{i}. [{source}] {title}**  
-                            유사도: {score:.2f}  
-                            {ref['text'][:200]}...
+                            **{i}. [{source}] {title_display}**  
+                            유사도: {score:.3f} | Reddit 점수: {reddit_score} | 커뮤니티 판정: **{verdict}**  
+                            
+                            {content_ko}...
                             """)
+                            
+                            # 상위 댓글 표시
+                            comments = ref['metadata'].get('comments', [])
+                            if comments:
+                                st.markdown("**💬 주요 댓글들:**")
+                                top_comments = sorted(comments, key=lambda x: x.get('score', 0), reverse=True)[:3]
+                                for j, comment in enumerate(top_comments, 1):
+                                    if hasattr(st.session_state.bot, '_translate_to_korean'):
+                                        comment_ko = st.session_state.bot._translate_to_korean(comment.get('message', '')[:250])
+                                    else:
+                                        comment_ko = comment.get('message', '')[:250]
+                                    comment_score = comment.get('score', 0)
+                                    st.markdown(f"- **댓글{j}:** {comment_ko}... _(👍 {comment_score})_")
+                            
+                            st.markdown("---")
                 
                 # 응답을 세션에 저장
                 st.session_state.messages.append({
