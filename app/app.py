@@ -61,7 +61,7 @@ class RedditAdviseBot:
                 with open(config_file, "r") as f:
                     self.config = json.load(f)
                 
-                st.success(f"✅ {self.config['total_chunks']}개 Reddit 포스트 청크 로드 완료")
+                # st.success(f"✅ {self.config['total_chunks']}개 Reddit 포스트 청크 로드 완료")
             except Exception as e:
                 st.warning(f"인덱스 로딩 실패: {e}")
                 self.index = None
@@ -98,7 +98,7 @@ class RedditAdviseBot:
                     cache_folder="./models"
                 )
                 self.embedder.max_seq_length = 512  # 적당한 길이
-                st.success("✅ 임베딩 모델 로드 완료")
+                # st.success("✅ 임베딩 모델 로드 완료")
                 
             except Exception as e:
                 st.error(f"임베딩 모델 로드 실패: {e}")
@@ -117,7 +117,7 @@ class RedditAdviseBot:
                 raise ValueError("OpenAI API 키가 필요합니다.")
             
             self.client = OpenAI(api_key=api_key)
-            st.success("✅ OpenAI API 클라이언트 설정 완료")
+            # st.success("✅ OpenAI API 클라이언트 설정 완료")
     
     def _translate_to_korean(self, text: str) -> str:
         """영어 텍스트를 한국어로 번역"""
