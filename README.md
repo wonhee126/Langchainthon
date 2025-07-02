@@ -195,3 +195,5 @@ python scripts/build_index.py
 ## 📝 라이센스
 
 이 프로젝트는 교육 목적으로 제작되었습니다.
+[LangchainThon-쓰RAG.pdf](https://github.com/user-attachments/files/21019449/LangchainThon-.RAG.pdf)
+
